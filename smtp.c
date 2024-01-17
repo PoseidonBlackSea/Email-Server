@@ -28,22 +28,26 @@ void init_socket_smtp()
         exit (EXIT_FAILURE);
     }
 
+    fprintf(stderr, "SMTP Server listening on port %d...\n", PORT_SMTP);
+
     state.smtp_socket_fd = socket_desc;
 
     return;
 
 }
 
-void *smtp_session(void *parametrii)
+
+void *smtp_session(void *param)
 {
-    int client_socket = *((int *)parametrii);
-    free(parametrii);
+    int client_socket = *((int *)param);
+    free(param);
 
     struct session session;
     
     char send_buffer[BUFFER_SIZE];
     char recv_buffer[BUFFER_SIZE];
-    char *token;
+    char aux[BUFFER_SIZE];
+    char command[5];
     int rc;
     int data_message = 0;
 
@@ -56,6 +60,10 @@ void *smtp_session(void *parametrii)
 
 
     while(1) {
+        memset(command, '\0', 5);
+        memset(aux, '\0', BUFFER_SIZE);
+        memset(recv_buffer, '\0', BUFFER_SIZE);
+
         rc = recv(client_socket,  recv_buffer, BUFFER_SIZE, 0);
         
         if (rc == 0) {
@@ -66,40 +74,65 @@ void *smtp_session(void *parametrii)
             fprintf(stderr, "Error on sockett!\n");
             exit (EXIT_FAILURE);
         }
-        char *eol = strstr(recv_buffer, "\n");
-        eol[0] = '\0';
 
-        fprintf(stderr, "%s - %d\n", recv_buffer, client_socket);
+        fprintf(stderr, "%s", recv_buffer);
+
     if (data_message == 0) {
-        
-        char command[4];
-        for(int i=0; i<4; i++)
-            command[i] = recv_buffer[i];
-        command[4] = '\0';
-        
-        if (strcmp(command, "HELO") == 0) {
+        memcpy(command, recv_buffer, 4);
+        if (strcmp(command, "EHLO") == 0) {
             strcpy(session.sender_domain, recv_buffer + 5);
-            
             strcpy(send_buffer, "250 OK\r\n");
             send(client_socket, send_buffer, strlen(send_buffer), 0);
         } else if (strcmp(command, "MAIL") == 0) {
-            strcpy(send_buffer, "250 OK\r\n");
-            send(client_socket, send_buffer, strlen(send_buffer), 0);
+            char *start = strchr(recv_buffer, '<');
+            char *end = strchr(recv_buffer, '>');
+
+            if (start && end && end > start) {
+                size_t length = end - start - 1;
+                strncpy(session.sender, start + 1, length);
+                session.sender[length] = '\0';
+                
+                strcpy(send_buffer, "250 OK\r\n");
+                send(client_socket, send_buffer, strlen(send_buffer), 0);
+
+                fprintf(stderr, "MAIL: %s\n", session.sender);
+            } else {
+                fprintf(stderr, "MAIL)Nu s-a găsit o adresă de e-mail validă.\n");
+            }
         } else if (strcmp(command, "RCPT") == 0) {
-            strcpy(send_buffer, "250 OK\r\n");
-            send(client_socket, send_buffer, strlen(send_buffer), 0);
+            char *start = strchr(recv_buffer, '<');
+            char *end = strchr(recv_buffer, '>');
+
+            if (start && end && end > start) {
+                size_t length = end - start - 1;
+                strncpy(session.recipient, start + 1, length);
+                session.recipient[length] = '\0';
+
+                strcpy(send_buffer, "250 OK\r\n");
+                send(client_socket, send_buffer, strlen(send_buffer), 0);
+                
+                fprintf(stderr, "RCPT: %s\n", session.recipient);
+            } else {
+                fprintf(stderr, "RCPT)Nu s-a găsit o adresă de e-mail validă.\n");
+            }
+
         } else if (strcmp(command, "DATA") == 0) {
-            strcpy(send_buffer, "354\r\n");
+            strcpy(send_buffer, "354 OK\r\n");
             send(client_socket, send_buffer, strlen(send_buffer), 0);
             data_message = 1;
         } else if (strcmp(command, "QUIT") == 0) {
-            strcpy(send_buffer, "221\r\n");
+            strcpy(send_buffer, "221 BYE\r\n");
             send(client_socket, send_buffer, strlen(send_buffer), 0);
             break;
+        } else if (strcmp(command, "NOOP") == 0) {
+            strcpy(send_buffer, "250 OK\r\n");
+            send(client_socket, send_buffer, strlen(send_buffer), 0);
         }
     } else if (data_message == 1) {
-        if (strcmp(recv_buffer, ".") == 0) {
-            strcpy(send_buffer, "250\r\n");
+        memcpy(command, recv_buffer, 1);
+
+        if (strcmp(command, ".") == 0) {
+            strcpy(send_buffer, "250 OK\r\n");
             send(client_socket, send_buffer, strlen(send_buffer), 0);
             data_message = 0;
         }
@@ -111,4 +144,5 @@ void *smtp_session(void *parametrii)
 
     return ;
 }
+
 

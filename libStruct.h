@@ -7,6 +7,8 @@
 #include <arpa/inet.h>
 #include <stdlib.h>
 #include <pthread.h>
+#include <mysql.h>
+
 
 #define DOMAIN "localhost"
 #define BUFFER_SIZE 4096
@@ -22,9 +24,19 @@ extern struct State state;
 
 struct session {
     char sender_domain[100];
-    char *recipient;
-    char *sender;
-    char *data;
+    char recipient[256];
+    char sender[256];
+    char data[BUFFER_SIZE];
 };
+
+typedef struct{
+
+	char *server;
+	char *user;
+	char *password;
+	char *database;
+} MailDB;
+
+MailDB mail_db = {"localhost", "root", "root", "mysql"};
 
 #endif // LIBSTRUCT_H
