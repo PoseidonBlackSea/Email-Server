@@ -46,10 +46,10 @@ void *smtp_session(void *param)
     
     char send_buffer[BUFFER_SIZE];
     char recv_buffer[BUFFER_SIZE];
-    char aux[BUFFER_SIZE];
     char command[5];
     int rc;
     int data_message = 0;
+    int start_index = 0;
 
     sprintf(send_buffer, "220 \r\n");
     rc = send(client_socket, send_buffer, strlen(send_buffer), 0);
@@ -61,7 +61,6 @@ void *smtp_session(void *param)
 
     while(1) {
         memset(command, '\0', 5);
-        memset(aux, '\0', BUFFER_SIZE);
         memset(recv_buffer, '\0', BUFFER_SIZE);
 
         rc = recv(client_socket,  recv_buffer, BUFFER_SIZE, 0);
@@ -123,6 +122,20 @@ void *smtp_session(void *param)
         } else if (strcmp(command, "QUIT") == 0) {
             strcpy(send_buffer, "221 BYE\r\n");
             send(client_socket, send_buffer, strlen(send_buffer), 0);
+
+            MYSQL *conn;
+            MYSQL_RES *res;
+            MYSQL_ROW row;
+
+            conn = mysql_init(NULL);
+
+            if(!mysql_real_connect(conn, mail_db.server, mail_db.user, mail_db.password,
+                                    mail_db.database, 0, NULL, 0)) {
+                fprintf(stderr, "%s\n", mysql_error(conn));
+                exit (-1);
+            }
+
+
             break;
         } else if (strcmp(command, "NOOP") == 0) {
             strcpy(send_buffer, "250 OK\r\n");
@@ -130,16 +143,21 @@ void *smtp_session(void *param)
         }
     } else if (data_message == 1) {
         memcpy(command, recv_buffer, 1);
-
         if (strcmp(command, ".") == 0) {
             strcpy(send_buffer, "250 OK\r\n");
             send(client_socket, send_buffer, strlen(send_buffer), 0);
             data_message = 0;
+            start_index = 0;
+        } else {
+            memcpy(session.data + start_index, recv_buffer, sizeof(recv_buffer));
+            start_index += strlen(session.data);
         }
     }
         memset(send_buffer, '\0', BUFFER_SIZE);
     }
     
+    fprintf(stderr, "%s", session.data);
+
     close(client_socket);
 
     return ;

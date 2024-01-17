@@ -17,11 +17,34 @@ void handle_fetch(int message_number, char *send_buffer, char *current_mailbox) 
     // Implementeaza logica pentru comanda FETCH aici
 }\
 
-void handle_capability(char *send_buffer) {
+void handle_capability(char *recv_buff, int socket) {
     // Implementează logica pentru gestionarea comenzii CAPABILITY
     // Exemplu simplu:
-    printf("CAPABILITY\n");
-    snprintf(send_buffer, 256, "* CAPABILITY IMAP4rev1 \r\n");
+    //snprintf(send_buffer, 256, "* OK [CAPABILITY IMAP4rev1 LITERAL+ SASL-IR LOGIN-REFERRALS ID ENABLE IDLE AUTH=PLAIN AUTH=LOGIN] IMAP/POP3 ready - us11-011mip \r\n");
+    char send_buffer[256];
+    memcpy(send_buffer,"* OK [CAPABILITY IMAP4rev1 AUTH=PLAIN ]\r\n", sizeof(send_buffer));
+    send(socket, send_buffer, strlen(send_buffer), 0);
+
+
+    memset(send_buffer, '\0', 256);
+    memcpy(send_buffer, recv_buff, 2);
+    memcpy(send_buffer+2, " OK CAPABILITY completed \r\n", 29);
+    send(socket, send_buffer, sizeof(send_buffer), 0);
+}
+
+void handle_authenticate(char *recv_buff, int socket) {
+    char send_buffer[256];
+    memcpy(send_buffer, "+ \r\n", sizeof(send_buffer));
+    send(socket, send_buffer, strlen(send_buffer), 0);
+
+    char aux[512];
+    recv(socket, aux, sizeof(aux), 0);
+    
+    memset(send_buffer, '\0', sizeof(send_buffer));
+    memcpy(send_buffer, recv_buff, 2);
+    memcpy(send_buffer+2, " OK AUTHENTICATE completed \r\n", 31);
+    send(socket, send_buffer, sizeof(send_buffer), 0);
+
 }
 
 void init_socket_imap(){
@@ -59,38 +82,37 @@ void init_socket_imap(){
 }
 
 void *imap_session(void *parametrii) {
-    MYSQL *conn;
-	MYSQL_RES *res;
-	MYSQL_ROW row;
+    // MYSQL *conn;
+	// MYSQL_RES *res;
+	// MYSQL_ROW row;
 
-    conn = mysql_init(NULL);
+    // onn = mysql_init(NULL);
 
-    int k;
+    char recv_buffer[BUFFER_SIZE];
+    char send_buffer[BUFFER_SIZE];
+    // int k;
     int client_socket_fd = *((int *)parametrii);
     free(parametrii);
 
-    struct session session;
+    // struct session session;
 
     char mailbox[BUFFER_SIZE];
     int selected = 0;
     char current_mailbox[BUFFER_SIZE];
 
-    char send_buffer[BUFFER_SIZE];
-    char recv_buffer[BUFFER_SIZE];
-
     snprintf(send_buffer, sizeof(send_buffer), "* OK IMAP Server Ready\r\n");
-    k = send(client_socket_fd, send_buffer, strlen(send_buffer), 0);
+    int k = send(client_socket_fd, send_buffer, strlen(send_buffer), 0);
 
     if (k == -1) {
         fprintf(stderr, "ERROR Imap Server NOT Ready\n");
         exit(EXIT_FAILURE);
     }
 
-    if(!mysql_real_connect(conn,mail_db.server,mail_db.user,mail_db.password,mail_db.database,0,NULL,0))
-    {
-        fprintf(stderr,"%s\n", mysql_error(conn));
-        exit(1);
-    }
+    // if(!mysql_real_connect(conn,mail_db.server,mail_db.user,mail_db.password,mail_db.database,0,NULL,0))
+    // {
+    //     fprintf(stderr,"%s\n", mysql_error(conn));
+    //     exit(1);
+    // }
 
     while (1) {
         int bytes_received = recv(client_socket_fd, recv_buffer, sizeof(recv_buffer), 0);
@@ -103,8 +125,8 @@ void *imap_session(void *parametrii) {
         recv_buffer[bytes_received] = '\0';
         printf("Comanda primita de la client: %s", recv_buffer);
 
-        if (strstr(recv_buffer, "CAPABILITY") != NULL) {
-            handle_capability(send_buffer);
+        if (strstr(recv_buffer, "capability") != NULL) {
+            handle_capability(recv_buffer, client_socket_fd);
         } else if (strstr(recv_buffer, "LOGIN") != NULL) {
             handle_login(send_buffer);
         } else if (strstr(recv_buffer, "SELECT") != NULL) {
@@ -112,16 +134,16 @@ void *imap_session(void *parametrii) {
             sscanf(recv_buffer, "SELECT %s", mailbox);
             handle_select(mailbox, send_buffer);
         } else if (strstr(recv_buffer, "FETCH") != NULL) {
-            // Restul codului pentru gestionarea comenzii FETCH
-            // ...
+           //Restul codului pentru gestionarea comenzii FETCH
+           //...
+        }else if(strstr(recv_buffer, "authenticate") != NULL) {
+            handle_authenticate(recv_buffer, client_socket_fd);
         } else if (strstr(recv_buffer, "LOGOUT") != NULL) {
-            // Restul codului pentru gestionarea comenzii LOGOUT
-            // ...
+           //Restul codului pentru gestionarea comenzii LOGOUT
+           //...
         } else {
             snprintf(send_buffer, 256, "A99 NO Unknown command\r\n");
         }
-
-        k = send(client_socket_fd, send_buffer, strlen(send_buffer), 0);
         if (k == -1) {
             fprintf(stderr, "ERROR Sending response\n");
             exit(EXIT_FAILURE);
@@ -129,5 +151,6 @@ void *imap_session(void *parametrii) {
     }
 
     close(client_socket_fd);
+
     return NULL;
 }

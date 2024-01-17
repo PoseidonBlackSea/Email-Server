@@ -12,8 +12,8 @@
 void handle_login(char *send_buffer);
 void handle_select(char *mailbox, char *send_buffer);
 void handle_fetch(int message_number, char *send_buffer, char *current_mailbox);
-void handle_capability(char *send_buffer);
-
+void handle_capability(char *send_buffer, int socket);
+void handle_authenticate(char *recv_buff, int socket);
 
 void init_socket_imap();
 void *imap_session(void *parametrii);

@@ -10,9 +10,6 @@
 #include <mysql.h>
 
 
-#include <stdio.h>
-#include <mysql.h>
-
 #define DOMAIN "localhost"
 #define BUFFER_SIZE 4096
 
@@ -32,14 +29,13 @@ struct session {
     char data[BUFFER_SIZE];
 };
 
-typedef struct{
-
+struct MailDB{
 	char *server;
 	char *user;
 	char *password;
 	char *database;
-} MailDB;
+};
 
-MailDB mail_db = {"localhost", "root", "root", "mysql"};
+extern struct MailDB mail_db;
 
-#endif // LIBSTRUCT_H
+#endif  //LIBSTRUCT_H

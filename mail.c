@@ -3,7 +3,7 @@
 
 void *imap_while(void *params);
 
-int main(int argc, char *argv[]) 
+int main() 
 {
     int client_sock, client_size;
 
