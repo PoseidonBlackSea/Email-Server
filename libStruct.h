@@ -10,6 +10,9 @@
 #include <mysql.h>
 
 
+#include <stdio.h>
+#include <mysql.h>
+
 #define DOMAIN "localhost"
 #define BUFFER_SIZE 4096
 
