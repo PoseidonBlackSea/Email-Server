@@ -3,11 +3,9 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -I/usr/include/mysql
 
-# Lista de fișiere sursă și obiect
 SRC_FILES = imap.c smtp.c mail.c libStruct.c
 OBJ_FILES = $(SRC_FILES:.c=.o)
 
-# Numele executabilului
 EXECUTABLE = mail_executable
 
 all: $(EXECUTABLE)

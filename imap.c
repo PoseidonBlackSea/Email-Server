@@ -13,10 +13,6 @@ void handle_select(char *mailbox, char *send_buffer) {
     snprintf(send_buffer, 256, "A2 OK [READ-WRITE] SELECT completed\r\n");
 }
 
-void handle_fetch(int message_number, char *send_buffer, char *current_mailbox) {
-    // Implementeaza logica pentru comanda FETCH aici
-}\
-
 void handle_capability(char *recv_buff, int socket) {
     // Implementează logica pentru gestionarea comenzii CAPABILITY
     // Exemplu simplu:
@@ -30,6 +26,10 @@ void handle_capability(char *recv_buff, int socket) {
     memcpy(send_buffer, recv_buff, 2);
     memcpy(send_buffer+2, " OK CAPABILITY completed \r\n", 29);
     send(socket, send_buffer, sizeof(send_buffer), 0);
+}
+
+void handle_fetch(char *recv_buff, int socket) {
+    
 }
 
 void handle_authenticate(char *recv_buff, int socket) {
@@ -94,10 +94,7 @@ void *imap_session(void *parametrii) {
     int client_socket_fd = *((int *)parametrii);
     free(parametrii);
 
-    // struct session session;
-
     char mailbox[BUFFER_SIZE];
-    int selected = 0;
     char current_mailbox[BUFFER_SIZE];
 
     snprintf(send_buffer, sizeof(send_buffer), "* OK IMAP Server Ready\r\n");
@@ -134,15 +131,13 @@ void *imap_session(void *parametrii) {
             sscanf(recv_buffer, "SELECT %s", mailbox);
             handle_select(mailbox, send_buffer);
         } else if (strstr(recv_buffer, "FETCH") != NULL) {
-           //Restul codului pentru gestionarea comenzii FETCH
-           //...
+            handle_fetch(recv_buffer, client_socket_fd);
         }else if(strstr(recv_buffer, "authenticate") != NULL) {
             handle_authenticate(recv_buffer, client_socket_fd);
         } else if (strstr(recv_buffer, "LOGOUT") != NULL) {
-           //Restul codului pentru gestionarea comenzii LOGOUT
-           //...
+           //LOGOUT
         } else {
-            snprintf(send_buffer, 256, "A99 NO Unknown command\r\n");
+            snprintf(send_buffer, 256, "* NO Unknown command\r\n");
         }
         if (k == -1) {
             fprintf(stderr, "ERROR Sending response\n");

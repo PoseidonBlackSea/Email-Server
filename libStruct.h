@@ -13,20 +13,17 @@
 #define DOMAIN "localhost"
 #define BUFFER_SIZE 4096
 
-// Definim un tip pentru structura state
 struct State {
     int smtp_socket_fd;
     int imap_socket_fd;
 };
 
-// Declaram variabila state
 extern struct State state;
 
-struct session {
-    char sender_domain[100];
+struct session_smtp {
     char recipient[256];
     char sender[256];
-    char data[BUFFER_SIZE];
+    char content[BUFFER_SIZE];
 };
 
 struct MailDB{

@@ -42,7 +42,7 @@ void *smtp_session(void *param)
     int client_socket = *((int *)param);
     free(param);
 
-    struct session session;
+    struct session_smtp session;
     
     char send_buffer[BUFFER_SIZE];
     char recv_buffer[BUFFER_SIZE];
@@ -60,11 +60,13 @@ void *smtp_session(void *param)
 
 
     while(1) {
+        memset(send_buffer, '\0', BUFFER_SIZE);
         memset(command, '\0', 5);
         memset(recv_buffer, '\0', BUFFER_SIZE);
 
         rc = recv(client_socket,  recv_buffer, BUFFER_SIZE, 0);
-        
+
+
         if (rc == 0) {
             fprintf(stderr, "Host closed the socket!\n");
             break;
@@ -76,87 +78,89 @@ void *smtp_session(void *param)
 
         fprintf(stderr, "%s", recv_buffer);
 
-    if (data_message == 0) {
-        memcpy(command, recv_buffer, 4);
-        if (strcmp(command, "EHLO") == 0) {
-            strcpy(session.sender_domain, recv_buffer + 5);
-            strcpy(send_buffer, "250 OK\r\n");
-            send(client_socket, send_buffer, strlen(send_buffer), 0);
-        } else if (strcmp(command, "MAIL") == 0) {
-            char *start = strchr(recv_buffer, '<');
-            char *end = strchr(recv_buffer, '>');
-
-            if (start && end && end > start) {
-                size_t length = end - start - 1;
-                strncpy(session.sender, start + 1, length);
-                session.sender[length] = '\0';
-                
+        if (data_message == 0) {
+            memcpy(command, recv_buffer, 4);
+            if (strcmp(command, "EHLO") == 0 || strcmp(command, "HELO") == 0) {
                 strcpy(send_buffer, "250 OK\r\n");
                 send(client_socket, send_buffer, strlen(send_buffer), 0);
+            } else if (strcmp(command, "MAIL") == 0) {
+                
+                char *start = strchr(recv_buffer, '<');
+                char *end = strchr(recv_buffer, '>');
 
-                fprintf(stderr, "MAIL: %s\n", session.sender);
-            } else {
-                fprintf(stderr, "MAIL)Nu s-a găsit o adresă de e-mail validă.\n");
-            }
-        } else if (strcmp(command, "RCPT") == 0) {
-            char *start = strchr(recv_buffer, '<');
-            char *end = strchr(recv_buffer, '>');
+                if (start && end && end > start) {
+                    size_t length = end - start - 1;
+                    strncpy(session.sender, start + 1, length);
+                    session.sender[length] = '\0';
 
-            if (start && end && end > start) {
-                size_t length = end - start - 1;
-                strncpy(session.recipient, start + 1, length);
-                session.recipient[length] = '\0';
+                    strcpy(send_buffer, "250 OK\r\n");
+                    send(client_socket, send_buffer, strlen(send_buffer), 0);
+                } else {
+                    strcpy(send_buffer, "500 Command not recognized\r\n");
+                    send(client_socket, send_buffer, strlen(send_buffer), 0);
+                }
+            } else if (strcmp(command, "RCPT") == 0) {
+                char *start = strchr(recv_buffer, '<');
+                char *end = strchr(recv_buffer, '>');
 
+                if (start && end && end > start) {
+                    size_t length = end - start - 1;
+                    strncpy(session.recipient, start + 1, length);
+                    session.recipient[length] = '\0';
+
+                    strcpy(send_buffer, "250 OK\r\n");
+                    send(client_socket, send_buffer, strlen(send_buffer), 0);
+                } else {
+                    strcpy(send_buffer, "500 Command not recognized\r\n");
+                    send(client_socket, send_buffer, strlen(send_buffer), 0);
+                }
+
+            } else if (strcmp(command, "DATA") == 0) {
+                strcpy(send_buffer, "354 OK\r\n");
+                send(client_socket, send_buffer, strlen(send_buffer), 0);
+                data_message = 1;
+            } else if (strcmp(command, "QUIT") == 0) {
+                strcpy(send_buffer, "221 BYE\r\n");
+                send(client_socket, send_buffer, strlen(send_buffer), 0);
+
+                MYSQL *conn;
+                MYSQL_RES *res;
+                MYSQL_ROW row;
+
+                conn = mysql_init(NULL);
+
+                if(!mysql_real_connect(conn, mail_db.server, mail_db.user, mail_db.password,
+                                        mail_db.database, 0, NULL, 0)) {
+                    fprintf(stderr, "%s\n", mysql_error(conn));
+                    exit (-1);
+                }
+
+                mysql_free_result(res);
+	            mysql_close(conn);
+
+                break;
+            } else if (strcmp(command, "NOOP") == 0) {
                 strcpy(send_buffer, "250 OK\r\n");
                 send(client_socket, send_buffer, strlen(send_buffer), 0);
-                
-                fprintf(stderr, "RCPT: %s\n", session.recipient);
             } else {
-                fprintf(stderr, "RCPT)Nu s-a găsit o adresă de e-mail validă.\n");
+                strcpy(send_buffer, "500 Command not recognized\r\n");
+                send(client_socket, send_buffer, strlen(send_buffer), 0);
             }
-
-        } else if (strcmp(command, "DATA") == 0) {
-            strcpy(send_buffer, "354 OK\r\n");
-            send(client_socket, send_buffer, strlen(send_buffer), 0);
-            data_message = 1;
-        } else if (strcmp(command, "QUIT") == 0) {
-            strcpy(send_buffer, "221 BYE\r\n");
-            send(client_socket, send_buffer, strlen(send_buffer), 0);
-
-            MYSQL *conn;
-            MYSQL_RES *res;
-            MYSQL_ROW row;
-
-            conn = mysql_init(NULL);
-
-            if(!mysql_real_connect(conn, mail_db.server, mail_db.user, mail_db.password,
-                                    mail_db.database, 0, NULL, 0)) {
-                fprintf(stderr, "%s\n", mysql_error(conn));
-                exit (-1);
+        } else if (data_message == 1) {
+            memcpy(command, recv_buffer, 1);
+            
+            if (strcmp(command, ".") == 0) {
+                strcpy(send_buffer, "250 OK\r\n");
+                send(client_socket, send_buffer, strlen(send_buffer), 0);
+                fprintf(stderr, "%s", session.content);
+                data_message = 0;
+                start_index = 0;
+            } else {
+                memcpy(session.content + start_index, recv_buffer, sizeof(session.content));
+                start_index += rc;
             }
-
-
-            break;
-        } else if (strcmp(command, "NOOP") == 0) {
-            strcpy(send_buffer, "250 OK\r\n");
-            send(client_socket, send_buffer, strlen(send_buffer), 0);
-        }
-    } else if (data_message == 1) {
-        memcpy(command, recv_buffer, 1);
-        if (strcmp(command, ".") == 0) {
-            strcpy(send_buffer, "250 OK\r\n");
-            send(client_socket, send_buffer, strlen(send_buffer), 0);
-            data_message = 0;
-            start_index = 0;
-        } else {
-            memcpy(session.data + start_index, recv_buffer, sizeof(recv_buffer));
-            start_index += strlen(session.data);
         }
     }
-        memset(send_buffer, '\0', BUFFER_SIZE);
-    }
-    
-    fprintf(stderr, "%s", session.data);
 
     close(client_socket);
 
